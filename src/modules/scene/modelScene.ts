@@ -70,7 +70,7 @@ export function createModelScene({
     const maxAxis = Math.max(size.x, size.y, size.z) || 1;
     const fitScale = 1.7 / maxAxis;
     currentModel.scale.setScalar(fitScale);
-    currentModel.rotation.y = Math.PI;
+    currentModel.rotation.set(0, 0, 0);
   }
 
   function render(position: {
@@ -86,12 +86,12 @@ export function createModelScene({
       -((position.y / height) * 2 - 1) * 1.8,
       0,
     );
-    root.rotation.z = (position.rotation * Math.PI) / 180;
+    root.rotation.set(0, (position.rotation * Math.PI) / 180, 0);
     root.scale.setScalar(position.scale);
 
     if (currentModel) {
       currentModel.position.y = Math.sin(idleOffset) * 0.08;
-      currentModel.rotation.y = Math.PI + Math.sin(idleOffset * 0.8) * 0.12;
+      currentModel.rotation.y = Math.sin(idleOffset * 0.8) * 0.12;
     }
 
     renderer.render(scene, camera);

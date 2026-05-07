@@ -16,6 +16,7 @@ const DEFAULT_TRANSFORM: CharacterTransform = {
 const TRANSFORM_STEP = 18;
 const SCALE_STEP = 0.08;
 const ROTATE_STEP = 8;
+const MODEL_ANGLE_PRESETS = [0, 90, 180, 270];
 
 function App() {
   const { videoRef, status, errorMessage, startCamera } = useCamera();
@@ -114,6 +115,15 @@ function App() {
 
   function nudgeTransform(patch: Partial<CharacterTransform>) {
     setTransform((current) => ({ ...current, ...patch }));
+  }
+
+  function setRotationAngle(angle: number) {
+    setTransform((current) => ({ ...current, rotation: angle }));
+  }
+
+  function getNormalizedAngle(angle: number) {
+    const normalized = ((angle % 360) + 360) % 360;
+    return normalized === 360 ? 0 : normalized;
   }
 
   function handleImageImportClick() {
@@ -344,6 +354,24 @@ function App() {
             右转
           </button>
         </div>
+
+        {asset?.kind === "model3d" ? (
+          <div className="angle-panel">
+            <p>模型朝向：{getNormalizedAngle(transform.rotation)}°</p>
+            <div className="angle-grid">
+              {MODEL_ANGLE_PRESETS.map((angle) => (
+                <button
+                  className={getNormalizedAngle(transform.rotation) === angle ? "angle-active" : ""}
+                  key={angle}
+                  onClick={() => setRotationAngle(angle)}
+                  type="button"
+                >
+                  {angle}°
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {captureUrl ? (
           <div className="capture-preview">

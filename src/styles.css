@@ -167,6 +167,35 @@ input {
   gap: 10px;
 }
 
+.angle-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.angle-panel p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: rgba(244, 247, 251, 0.82);
+}
+
+.angle-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.angle-grid button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 44px;
+  color: #f4f7fb;
+  background: #1c2330;
+}
+
+.angle-grid .angle-active {
+  background: #314462;
+}
+
 .capture-preview {
   border-radius: 8px;
   overflow: hidden;
