@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { captureScene } from "./modules/capture/captureScene";
+import { getAssetDisplaySize, type AssetDisplaySize } from "./modules/assets/displaySize";
 import { mapFileToAsset } from "./modules/assets/fileHelpers";
 import { useCamera } from "./modules/camera/useCamera";
 import { createModelScene } from "./modules/scene/modelScene";
@@ -24,9 +25,11 @@ function App() {
   const imagePreviewRef = useRef<HTMLImageElement | null>(null);
   const modelSceneRef = useRef<ReturnType<typeof createModelScene> | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const transformRef = useRef<CharacterTransform>(DEFAULT_TRANSFORM);
 
   const [asset, setAsset] = useState<ImportedAsset | null>(null);
   const [transform, setTransform] = useState<CharacterTransform>(DEFAULT_TRANSFORM);
+  const [imageSize, setImageSize] = useState<AssetDisplaySize>({ width: 220, height: 220 });
   const [message, setMessage] = useState("准备好后，开启前摄并导入角色。");
   const [captureUrl, setCaptureUrl] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -34,6 +37,10 @@ function App() {
   useEffect(() => {
     void startCamera();
   }, [startCamera]);
+
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
 
   useEffect(() => {
     const canvas = modelCanvasRef.current;
@@ -50,19 +57,36 @@ function App() {
     modelSceneRef.current = controller;
 
     const renderLoop = () => {
-      controller.render(transform);
+      controller.render(transformRef.current);
       animationFrameRef.current = window.requestAnimationFrame(renderLoop);
     };
 
+    const resizeScene = () => {
+      canvas.width = stage.clientWidth;
+      canvas.height = stage.clientHeight;
+      controller.resize(stage.clientWidth, stage.clientHeight);
+    };
+
+    resizeScene();
+    window.addEventListener("resize", resizeScene);
     renderLoop();
 
     return () => {
       if (animationFrameRef.current) {
         window.cancelAnimationFrame(animationFrameRef.current);
       }
+      window.removeEventListener("resize", resizeScene);
       controller.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    if (!modelSceneRef.current) {
+      return;
+    }
+
+    modelSceneRef.current.render(transform);
+  }, [transform]);
 
   useEffect(() => {
     if (asset?.kind !== "model3d" || !modelSceneRef.current) {
@@ -78,9 +102,13 @@ function App() {
 
   const heroStyle = useMemo(
     () => ({
-      transform: `translate(${transform.x}px, ${transform.y}px) rotate(${transform.rotation}deg) scale(${transform.scale})`,
+      left: `${transform.x}px`,
+      top: `${transform.y}px`,
+      width: `${imageSize.width}px`,
+      height: `${imageSize.height}px`,
+      transform: `translate(-50%, -50%) rotate(${transform.rotation}deg) scale(${transform.scale})`,
     }),
-    [transform],
+    [imageSize.height, imageSize.width, transform],
   );
 
   function nudgeTransform(patch: Partial<CharacterTransform>) {
@@ -117,6 +145,7 @@ function App() {
       image.src = nextAsset.objectUrl;
       image.onload = () => {
         imagePreviewRef.current = image;
+        setImageSize(getAssetDisplaySize(image.naturalWidth, image.naturalHeight));
         setMessage(`已载入图片：${nextAsset.name}`);
       };
     }
@@ -142,9 +171,42 @@ function App() {
       });
 
       setCaptureUrl(dataUrl);
-      setMessage("自拍完成，长按预览图即可保存。");
+      setMessage("自拍完成，可以直接保存到本地。");
     } catch {
       setMessage("导出失败了，稍后再试一次。");
+    }
+  }
+
+  async function handleSave() {
+    if (!captureUrl) {
+      return;
+    }
+
+    try {
+      const response = await fetch(captureUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `dimensional-selfie-${Date.now()}.png`, {
+        type: "image/png",
+      });
+
+      if (navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "次元自拍相机",
+        });
+        setMessage("已打开系统分享面板。");
+        return;
+      }
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = file.name;
+      link.click();
+      URL.revokeObjectURL(downloadUrl);
+      setMessage("已触发保存下载。");
+    } catch {
+      setMessage("保存失败了，请稍后再试。");
     }
   }
 
@@ -267,6 +329,9 @@ function App() {
         {captureUrl ? (
           <div className="capture-preview">
             <img alt="自拍结果" src={captureUrl} />
+            <button className="save-button" onClick={handleSave} type="button">
+              保存到本地
+            </button>
           </div>
         ) : null}
       </section>

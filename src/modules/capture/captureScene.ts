@@ -1,4 +1,5 @@
 import type { CharacterTransform } from "../../types";
+import { getAssetDisplaySize } from "../assets/displaySize";
 
 type CaptureSceneOptions = {
   video: HTMLVideoElement;
@@ -24,26 +25,29 @@ export function captureScene({
     throw new Error("截图上下文不可用。");
   }
 
+  context.save();
+  context.translate(canvas.width, 0);
+  context.scale(-1, 1);
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  context.restore();
 
   if (imageElement) {
+    const displaySize = getAssetDisplaySize(
+      imageElement.naturalWidth,
+      imageElement.naturalHeight,
+    );
+
     context.save();
     context.translate(transform.x, transform.y);
     context.rotate((transform.rotation * Math.PI) / 180);
     context.scale(transform.scale, transform.scale);
 
-    const width = imageElement.naturalWidth;
-    const height = imageElement.naturalHeight;
-    const ratio = Math.min(1, 320 / Math.max(width, height));
-    const drawWidth = width * ratio;
-    const drawHeight = height * ratio;
-
     context.drawImage(
       imageElement,
-      -drawWidth / 2,
-      -drawHeight / 2,
-      drawWidth,
-      drawHeight,
+      -displaySize.width / 2,
+      -displaySize.height / 2,
+      displaySize.width,
+      displaySize.height,
     );
     context.restore();
   }

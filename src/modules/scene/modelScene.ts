@@ -10,6 +10,7 @@ type CreateModelSceneOptions = {
 export type ModelSceneController = {
   loadModel: (url: string) => Promise<void>;
   render: (position: { x: number; y: number; scale: number; rotation: number }) => void;
+  resize: (width: number, height: number) => void;
   dispose: () => void;
 };
 
@@ -43,6 +44,12 @@ export function createModelScene({
   let idleOffset = 0;
 
   const loader = new GLTFLoader();
+
+  function resize(nextWidth: number, nextHeight: number) {
+    camera.aspect = nextWidth / nextHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(nextWidth, nextHeight, false);
+  }
 
   async function loadModel(url: string) {
     const gltf = await loader.loadAsync(url);
@@ -95,5 +102,5 @@ export function createModelScene({
     scene.clear();
   }
 
-  return { loadModel, render, dispose };
+  return { loadModel, render, resize, dispose };
 }

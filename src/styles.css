@@ -61,11 +61,8 @@ input {
 
 .image-layer {
   position: absolute;
-  top: -72px;
-  left: -72px;
-  width: 144px;
-  animation: float-idle 2.8s ease-in-out infinite;
   touch-action: none;
+  will-change: transform;
 }
 
 .image-layer img {
@@ -175,19 +172,21 @@ input {
   overflow: hidden;
   background: #0b0f15;
   min-height: 180px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
 }
 
 .capture-preview img {
   width: 100%;
   display: block;
+  border-radius: 8px;
 }
 
-@keyframes float-idle {
-  0%,
-  100% {
-    transform: translateY(-4px);
-  }
-  50% {
-    transform: translateY(6px);
-  }
+.save-button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 48px;
+  color: #f4f7fb;
+  background: #273247;
 }
