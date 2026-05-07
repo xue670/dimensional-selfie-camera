@@ -21,7 +21,8 @@ function App() {
   const { videoRef, status, errorMessage, startCamera } = useCamera();
   const stageRef = useRef<HTMLDivElement>(null);
   const modelCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const modelInputRef = useRef<HTMLInputElement>(null);
   const imagePreviewRef = useRef<HTMLImageElement | null>(null);
   const modelSceneRef = useRef<ReturnType<typeof createModelScene> | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -115,8 +116,12 @@ function App() {
     setTransform((current) => ({ ...current, ...patch }));
   }
 
-  function handleImportClick() {
-    fileInputRef.current?.click();
+  function handleImageImportClick() {
+    imageInputRef.current?.click();
+  }
+
+  function handleModelImportClick() {
+    modelInputRef.current?.click();
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -148,7 +153,11 @@ function App() {
         setImageSize(getAssetDisplaySize(image.naturalWidth, image.naturalHeight));
         setMessage(`已载入图片：${nextAsset.name}`);
       };
+    } else {
+      setMessage(`正在载入 3D 模型：${nextAsset.name}`);
     }
+
+    event.target.value = "";
   }
 
   function handleCapture() {
@@ -279,15 +288,25 @@ function App() {
       <section className="control-panel">
         <input
           hidden
-          accept=".png,.jpg,.jpeg,.glb"
+          accept="image/png,image/jpeg,image/jpg"
           onChange={handleFileChange}
-          ref={fileInputRef}
+          ref={imageInputRef}
+          type="file"
+        />
+        <input
+          hidden
+          accept=".glb,model/gltf-binary,application/octet-stream,*/*"
+          onChange={handleFileChange}
+          ref={modelInputRef}
           type="file"
         />
 
         <div className="primary-actions">
-          <button className="tool-button" onClick={handleImportClick} type="button">
-            导入角色
+          <button className="tool-button" onClick={handleImageImportClick} type="button">
+            导入图片
+          </button>
+          <button className="tool-button" onClick={handleModelImportClick} type="button">
+            导入3D模型
           </button>
           <button
             className="shutter-button"
