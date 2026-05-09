@@ -29,15 +29,32 @@ const FRONT_CAMERA_CONSTRAINTS: MediaStreamConstraints = {
 export function useCamera(): UseCameraResult {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const desiredActiveRef = useRef(false);
+  const restartTimerRef = useRef<number | null>(null);
   const [status, setStatus] = useState<CameraStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   const stopCamera = useCallback(() => {
+    desiredActiveRef.current = false;
+
+    if (restartTimerRef.current) {
+      window.clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
   }, []);
 
   const startCamera = useCallback(async () => {
+    desiredActiveRef.current = true;
+
     if (!window.isSecureContext) {
       setStatus("insecure");
       setErrorMessage("当前页面不是安全环境。请改用 HTTPS 地址，或在设备本机的 localhost 中打开。");
@@ -54,7 +71,9 @@ export function useCamera(): UseCameraResult {
     setErrorMessage("");
 
     try {
-      stopCamera();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+
       const stream = await navigator.mediaDevices.getUserMedia(
         FRONT_CAMERA_CONSTRAINTS,
       );
@@ -89,9 +108,49 @@ export function useCamera(): UseCameraResult {
       setStatus(nextStatus);
       setErrorMessage(message);
     }
-  }, [stopCamera]);
+  }, []);
 
-  useEffect(() => stopCamera, [stopCamera]);
+  useEffect(() => {
+    const scheduleRestart = () => {
+      if (!desiredActiveRef.current || document.visibilityState !== "visible") {
+        return;
+      }
+
+      if (restartTimerRef.current) {
+        window.clearTimeout(restartTimerRef.current);
+      }
+
+      restartTimerRef.current = window.setTimeout(() => {
+        void startCamera();
+      }, 180);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        return;
+      }
+
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (!track || track.readyState === "ended") {
+        scheduleRestart();
+      }
+    };
+
+    const handlePageShow = () => {
+      scheduleRestart();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", handlePageShow);
+      stopCamera();
+    };
+  }, [startCamera, stopCamera]);
 
   return useMemo(
     () => ({ videoRef, status, errorMessage, startCamera, stopCamera }),

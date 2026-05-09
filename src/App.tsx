@@ -45,6 +45,14 @@ function App() {
   }, [transform]);
 
   useEffect(() => {
+    return () => {
+      if (asset) {
+        URL.revokeObjectURL(asset.objectUrl);
+      }
+    };
+  }, [asset]);
+
+  useEffect(() => {
     const canvas = modelCanvasRef.current;
     const stage = stageRef.current;
     if (!canvas || !stage) {
@@ -94,9 +102,22 @@ function App() {
     if (asset?.kind !== "model3d" || !modelSceneRef.current) {
       return;
     }
+
     void modelSceneRef.current
       .loadModel(asset.objectUrl)
-      .then(() => setMessage(`已载入模型：${asset.name}`))
+      .then((result) => {
+        if (result.activeClipName) {
+          setMessage(`已载入模型：${asset.name}，正在播放动作：${result.activeClipName}`);
+          return;
+        }
+
+        if (result.hasAnimations) {
+          setMessage(`已载入模型：${asset.name}，检测到动画但未匹配到默认待机动作。`);
+          return;
+        }
+
+        setMessage(`已载入模型：${asset.name}，当前使用轻量待机效果。`);
+      })
       .catch(() => setMessage("模型加载失败，试试一个体积更小的 GLB。"));
   }, [asset]);
 
@@ -221,9 +242,12 @@ function App() {
       const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = file.name;
+      link.rel = "noopener";
+      document.body.append(link);
       link.click();
+      link.remove();
       URL.revokeObjectURL(downloadUrl);
-      setMessage("已触发保存下载。");
+      setMessage("已触发保存下载。如果没有立刻看到图片，请检查下载列表或系统相册。");
     } catch {
       setMessage("保存失败了，请稍后再试。");
     }
