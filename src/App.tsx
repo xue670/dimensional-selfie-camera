@@ -16,6 +16,8 @@ const DEFAULT_TRANSFORM: CharacterTransform = {
 
 const TRANSFORM_STEP = 18;
 const SCALE_STEP = 0.08;
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 5.6;
 const ROTATE_STEP = 8;
 const MODEL_ANGLE_PRESETS = [0, 90, 180, 270];
 const BUNDLED_DEFAULT_MODEL_URL = "/models/default.glb";
@@ -307,25 +309,25 @@ function App() {
     const result = modelSceneRef.current.triggerResponse();
     if (result.mode === "clip") {
       setLastTriggerSource(source);
-      setMessage(
-        source === "wave"
-          ? `检测到挥手，角色正在播放动作：${result.activeClipName}`
-          : source === "tap"
+      if (source !== "wave") {
+        setMessage(
+          source === "tap"
             ? `你碰了一下角色，正在播放动作：${result.activeClipName}`
             : `角色回应了你，正在播放动作：${result.activeClipName}`,
-      );
+        );
+      }
       return;
     }
 
     if (result.mode === "fallback") {
       setLastTriggerSource(source);
-      setMessage(
-        source === "wave"
-          ? "检测到挥手，当前使用轻量点头互动。"
-          : source === "tap"
+      if (source !== "wave") {
+        setMessage(
+          source === "tap"
             ? "你碰了一下角色，当前使用轻量点头互动。"
             : "角色回应了你，当前使用轻量点头互动。",
-      );
+        );
+      }
       return;
     }
 
@@ -675,10 +677,10 @@ function App() {
           <button onClick={() => nudgeTransform({ x: transform.x + TRANSFORM_STEP })} type="button">
             右移
           </button>
-          <button onClick={() => nudgeTransform({ scale: Math.max(0.3, transform.scale - SCALE_STEP) })} type="button">
+          <button onClick={() => nudgeTransform({ scale: Math.max(MIN_SCALE, transform.scale - SCALE_STEP) })} type="button">
             缩小
           </button>
-          <button onClick={() => nudgeTransform({ scale: Math.min(2.4, transform.scale + SCALE_STEP) })} type="button">
+          <button onClick={() => nudgeTransform({ scale: Math.min(MAX_SCALE, transform.scale + SCALE_STEP) })} type="button">
             放大
           </button>
           <button onClick={() => nudgeTransform({ rotation: transform.rotation - ROTATE_STEP })} type="button">
