@@ -59,10 +59,17 @@ input {
   pointer-events: none;
 }
 
+.camera-stage-touch {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
 .image-layer {
   position: absolute;
   touch-action: none;
   will-change: transform;
+  z-index: 1;
 }
 
 .image-layer img {
@@ -165,6 +172,61 @@ input {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.scene-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scene-presets button {
+  border: 0;
+  border-radius: 10px;
+  min-height: 46px;
+  color: #f4f7fb;
+  background: #1c2330;
+}
+
+.scene-presets .preset-active {
+  background: #314462;
+}
+
+.scene-presets .respond-button {
+  background: linear-gradient(135deg, #ff9a6c, #ff6f91);
+  font-weight: 700;
+}
+
+.interaction-hint {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(19, 24, 34, 0.92);
+}
+
+.interaction-hint p {
+  margin: 0;
+  color: rgba(244, 247, 251, 0.8);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.interaction-chip {
+  justify-self: start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.interaction-idle {
+  color: #bcd7ff;
+}
+
+.interaction-responding {
+  color: #ffd1c4;
+  background: rgba(255, 111, 145, 0.16);
 }
 
 .angle-panel {

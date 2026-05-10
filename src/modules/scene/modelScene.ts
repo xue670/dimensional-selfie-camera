@@ -5,6 +5,7 @@ type CreateModelSceneOptions = {
   canvas: HTMLCanvasElement;
   width: number;
   height: number;
+  onInteractionStateChange?: (state: ModelInteractionState) => void;
 };
 
 type RenderTransform = {
@@ -12,22 +13,57 @@ type RenderTransform = {
   y: number;
   scale: number;
   rotation: number;
+  depth?: number;
+  tilt?: number;
+  roll?: number;
 };
 
 export type ModelLoadResult = {
   activeClipName: string | null;
   clipNames: string[];
   hasAnimations: boolean;
+  responseClipName: string | null;
+};
+
+export type ModelResponseResult = {
+  activeClipName: string | null;
+  mode: "clip" | "fallback" | "unavailable";
+};
+
+export type ModelInteractionState = {
+  activeClipName: string | null;
+  mode: "clip" | "fallback" | null;
+  phase: "idle" | "responding";
 };
 
 export type ModelSceneController = {
   loadModel: (url: string) => Promise<ModelLoadResult>;
+  triggerResponse: () => ModelResponseResult;
   render: (transform: RenderTransform) => void;
   resize: (width: number, height: number) => void;
   dispose: () => void;
 };
 
 const DEFAULT_IDLE_CLIP_PATTERNS = [/idle/i, /breath/i, /stand/i, /wait/i, /loop/i];
+const ANIMATION_BLEND_DURATION = 0.2;
+const RESPONSE_CLIP_PATTERNS = [
+  /wave/i,
+  /greet/i,
+  /hello/i,
+  /hi/i,
+  /happy/i,
+  /joy/i,
+  /cheer/i,
+  /jump/i,
+  /react/i,
+  /response/i,
+  /nod/i,
+  /bow/i,
+  /look/i,
+  /talk/i,
+  /thoughtful/i,
+  /pose/i,
+];
 
 function disposeObject3D(object: THREE.Object3D) {
   object.traverse((child) => {
@@ -57,10 +93,24 @@ function pickDefaultClip(clips: THREE.AnimationClip[]) {
   return clips[0] ?? null;
 }
 
+function pickResponseClip(clips: THREE.AnimationClip[], idleClip: THREE.AnimationClip | null) {
+  const candidates = clips.filter((clip) => clip !== idleClip);
+
+  for (const pattern of RESPONSE_CLIP_PATTERNS) {
+    const matched = candidates.find((clip) => pattern.test(clip.name));
+    if (matched) {
+      return matched;
+    }
+  }
+
+  return candidates[0] ?? null;
+}
+
 export function createModelScene({
   canvas,
   width,
   height,
+  onInteractionStateChange,
 }: CreateModelSceneOptions): ModelSceneController {
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -89,12 +139,50 @@ export function createModelScene({
   let viewportHeight = height;
   let currentModel: THREE.Object3D | null = null;
   let currentMixer: THREE.AnimationMixer | null = null;
-  let currentAction: THREE.AnimationAction | null = null;
+  let idleAction: THREE.AnimationAction | null = null;
+  let responseAction: THREE.AnimationAction | null = null;
+  let activeClipName: string | null = null;
+  let responseClipName: string | null = null;
   let hasRuntimeAnimation = false;
   let idleOffset = 0;
+  let fallbackResponseTime = 0;
+  let fallbackResponseCooldown = 0;
 
   const loader = new GLTFLoader();
   const clock = new THREE.Clock();
+
+  function emitInteractionState(
+    phase: "idle" | "responding",
+    mode: "clip" | "fallback" | null,
+  ) {
+    onInteractionStateChange?.({
+      activeClipName,
+      mode,
+      phase,
+    });
+  }
+
+  const handleMixerFinished = (event: { action?: THREE.AnimationAction }) => {
+    if (!responseAction || event.action !== responseAction) {
+      return;
+    }
+
+    if (idleAction) {
+      // Cross-fade back to idle to avoid a single-frame pose pop between clips.
+      idleAction.enabled = true;
+      idleAction.reset();
+      idleAction.setEffectiveWeight(1);
+      idleAction.setEffectiveTimeScale(1);
+      idleAction.crossFadeFrom(responseAction, ANIMATION_BLEND_DURATION, false);
+      idleAction.play();
+      activeClipName = idleAction.getClip().name;
+    } else {
+      responseAction.stop();
+      activeClipName = null;
+    }
+
+    emitInteractionState("idle", null);
+  };
 
   function resize(nextWidth: number, nextHeight: number) {
     viewportWidth = nextWidth;
@@ -107,15 +195,20 @@ export function createModelScene({
   async function loadModel(url: string): Promise<ModelLoadResult> {
     const gltf = await loader.loadAsync(url);
 
-    if (currentAction) {
-      currentAction.stop();
-      currentAction = null;
-    }
+    fallbackResponseTime = 0;
+    fallbackResponseCooldown = 0;
 
     if (currentMixer) {
+      currentMixer.removeEventListener("finished", handleMixerFinished);
       currentMixer.stopAllAction();
       currentMixer = null;
     }
+
+    idleAction = null;
+    responseAction = null;
+    activeClipName = null;
+    responseClipName = null;
+    emitInteractionState("idle", null);
 
     if (currentModel) {
       motionGroup.remove(currentModel);
@@ -138,37 +231,103 @@ export function createModelScene({
     currentModel.rotation.set(0, 0, 0);
 
     const clips = gltf.animations ?? [];
-    const defaultClip = pickDefaultClip(clips);
-    hasRuntimeAnimation = Boolean(defaultClip);
+    const idleClip = pickDefaultClip(clips);
+    const selectedResponseClip = pickResponseClip(clips, idleClip);
+    hasRuntimeAnimation = Boolean(idleClip);
 
-    if (defaultClip) {
+    if (idleClip) {
       currentMixer = new THREE.AnimationMixer(currentModel);
-      currentAction = currentMixer.clipAction(defaultClip);
-      currentAction.reset();
-      currentAction.setLoop(THREE.LoopRepeat, Infinity);
-      currentAction.fadeIn(0.2);
-      currentAction.play();
+      currentMixer.addEventListener("finished", handleMixerFinished);
+
+      idleAction = currentMixer.clipAction(idleClip);
+      idleAction.reset();
+      idleAction.setLoop(THREE.LoopRepeat, Infinity);
+      idleAction.fadeIn(0.2);
+      idleAction.play();
+      activeClipName = idleClip.name;
+
+      if (selectedResponseClip) {
+        responseAction = currentMixer.clipAction(selectedResponseClip);
+        responseAction.enabled = true;
+        responseAction.clampWhenFinished = true;
+        responseClipName = selectedResponseClip.name;
+      }
     }
 
     clock.getDelta();
+    emitInteractionState("idle", null);
 
     return {
-      activeClipName: defaultClip?.name ?? null,
+      activeClipName,
       clipNames: clips.map((clip) => clip.name),
       hasAnimations: clips.length > 0,
+      responseClipName,
+    };
+  }
+
+  function triggerResponse(): ModelResponseResult {
+    if (responseAction && currentMixer) {
+      if (idleAction) {
+        idleAction.enabled = true;
+        idleAction.setEffectiveWeight(1);
+        idleAction.setEffectiveTimeScale(1);
+        idleAction.fadeOut(ANIMATION_BLEND_DURATION);
+      }
+
+      responseAction.stop();
+      responseAction.enabled = true;
+      responseAction.reset();
+      responseAction.setLoop(THREE.LoopOnce, 1);
+      responseAction.setEffectiveWeight(1);
+      responseAction.setEffectiveTimeScale(1);
+      responseAction.fadeIn(ANIMATION_BLEND_DURATION);
+      responseAction.play();
+      activeClipName = responseAction.getClip().name;
+      emitInteractionState("responding", "clip");
+
+      return {
+        activeClipName,
+        mode: "clip",
+      };
+    }
+
+    if (currentModel && fallbackResponseCooldown <= 0) {
+      fallbackResponseTime = 0.9;
+      fallbackResponseCooldown = 0.5;
+      emitInteractionState("responding", "fallback");
+      return {
+        activeClipName: null,
+        mode: "fallback",
+      };
+    }
+
+    return {
+      activeClipName,
+      mode: currentModel ? "fallback" : "unavailable",
     };
   }
 
   function render(transform: RenderTransform) {
     const delta = clock.getDelta();
     idleOffset += delta * 1.4;
+    const previousFallbackResponseTime = fallbackResponseTime;
+    fallbackResponseTime = Math.max(0, fallbackResponseTime - delta);
+    fallbackResponseCooldown = Math.max(0, fallbackResponseCooldown - delta);
+
+    if (previousFallbackResponseTime > 0 && fallbackResponseTime === 0) {
+      emitInteractionState("idle", null);
+    }
 
     root.position.set(
       ((transform.x / viewportWidth) * 2 - 1) * 1.2,
       -((transform.y / viewportHeight) * 2 - 1) * 1.8,
-      0,
+      transform.depth ?? 0,
     );
-    root.rotation.set(0, (transform.rotation * Math.PI) / 180, 0);
+    root.rotation.set(
+      transform.tilt ?? 0,
+      (transform.rotation * Math.PI) / 180,
+      transform.roll ?? 0,
+    );
     root.scale.setScalar(transform.scale);
 
     if (currentMixer) {
@@ -176,24 +335,28 @@ export function createModelScene({
     }
 
     if (currentModel) {
-      if (hasRuntimeAnimation) {
-        motionGroup.position.y = 0;
-        motionGroup.rotation.y = 0;
-      } else {
-        motionGroup.position.y = Math.sin(idleOffset) * 0.08;
-        motionGroup.rotation.y = Math.sin(idleOffset * 0.8) * 0.12;
-      }
+      const baseBob = hasRuntimeAnimation ? 0 : Math.sin(idleOffset) * 0.08;
+      const baseTurn = hasRuntimeAnimation ? 0 : Math.sin(idleOffset * 0.8) * 0.12;
+      const responseProgress = fallbackResponseTime > 0 ? 1 - fallbackResponseTime / 0.9 : 0;
+      const responseEase = fallbackResponseTime > 0 ? Math.sin(responseProgress * Math.PI) : 0;
+      const responseNod =
+        fallbackResponseTime > 0
+          ? Math.sin(responseProgress * Math.PI * 2) * Math.sin(responseProgress * Math.PI)
+          : 0;
+
+      motionGroup.position.y = baseBob + responseEase * (hasRuntimeAnimation ? 0.05 : 0.09);
+      motionGroup.position.z = responseEase * 0.18;
+      motionGroup.rotation.y = baseTurn + responseEase * 0.08;
+      motionGroup.rotation.x = -responseEase * 0.16 - responseNod * 0.14;
+      motionGroup.rotation.z = responseEase * 0.04;
     }
 
     renderer.render(scene, camera);
   }
 
   function dispose() {
-    if (currentAction) {
-      currentAction.stop();
-    }
-
     if (currentMixer) {
+      currentMixer.removeEventListener("finished", handleMixerFinished);
       currentMixer.stopAllAction();
     }
 
@@ -205,5 +368,5 @@ export function createModelScene({
     scene.clear();
   }
 
-  return { loadModel, render, resize, dispose };
+  return { loadModel, triggerResponse, render, resize, dispose };
 }
