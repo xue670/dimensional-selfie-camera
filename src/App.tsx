@@ -18,6 +18,7 @@ const TRANSFORM_STEP = 18;
 const SCALE_STEP = 0.08;
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 5.6;
+const DEFAULT_MODEL_PREVIEW_SCALE = 3.2;
 const ROTATE_STEP = 8;
 const MODEL_ANGLE_PRESETS = [0, 90, 180, 270];
 const BUNDLED_DEFAULT_MODEL_URL = "/models/default.glb";
@@ -52,6 +53,15 @@ function getCompanionRenderAdjustments(slot: CompanionSlot) {
     depth: 0,
     tilt: 0,
     roll: 0,
+  };
+}
+
+function getDefaultModelPreviewTransform(stage: HTMLDivElement): CharacterTransform {
+  return {
+    x: stage.clientWidth * 0.5,
+    y: stage.clientHeight * 0.92,
+    scale: Math.min(MAX_SCALE, DEFAULT_MODEL_PREVIEW_SCALE),
+    rotation: 0,
   };
 }
 
@@ -171,6 +181,8 @@ function App() {
     void modelSceneRef.current
       .loadModel(asset.objectUrl)
       .then((result) => {
+        applyDefaultModelPreviewTransform();
+
         if (result.responseClipName) {
           setMessage(
             `已载入模型：${asset.name}，待机动作：${result.activeClipName ?? "未命名"}，互动动作：${result.responseClipName}`,
@@ -239,6 +251,16 @@ function App() {
     setCompanionSlot(slot);
     setTransform(nextTransform);
     setMessage(slot === "left" ? "已切到左下陪伴位。" : "已切到右下陪伴位。");
+  }
+
+  function applyDefaultModelPreviewTransform() {
+    const stage = stageRef.current;
+    if (!stage) {
+      return;
+    }
+
+    setCompanionSlot("free");
+    setTransform(getDefaultModelPreviewTransform(stage));
   }
 
   function nudgeTransform(patch: Partial<CharacterTransform>) {
@@ -351,7 +373,7 @@ function App() {
     setInteractionPhase("idle");
     setInteractionMode(null);
     setLastTriggerSource(null);
-    applyCompanionSlot("left");
+    applyDefaultModelPreviewTransform();
     setCaptureUrl("");
     setMessage("正在加载默认模型...");
   }
@@ -568,9 +590,11 @@ function App() {
           </span>
         </header>
 
-        <div className="guidance-card">
-          <p>{errorMessage || message}</p>
-        </div>
+        {errorMessage ? (
+          <div className="guidance-card">
+            <p>{errorMessage}</p>
+          </div>
+        ) : null}
       </section>
 
       <section className="control-panel">
