@@ -18,6 +18,8 @@ const TRANSFORM_STEP = 18;
 const SCALE_STEP = 0.08;
 const ROTATE_STEP = 8;
 const MODEL_ANGLE_PRESETS = [0, 90, 180, 270];
+const BUNDLED_DEFAULT_MODEL_URL = "/models/default.glb";
+const BUNDLED_DEFAULT_MODEL_NAME = "默认模型";
 const MODEL_TAP_TRIGGER_BASE_WIDTH = 190;
 const MODEL_TAP_TRIGGER_BASE_HEIGHT = 240;
 const MODEL_TAP_MAX_DURATION = 260;
@@ -94,7 +96,7 @@ function App() {
 
   useEffect(() => {
     return () => {
-      if (asset) {
+      if (asset?.objectUrl.startsWith("blob:")) {
         URL.revokeObjectURL(asset.objectUrl);
       }
     };
@@ -186,7 +188,13 @@ function App() {
 
         setMessage(`已载入模型：${asset.name}，当前使用轻量待机效果。`);
       })
-      .catch(() => setMessage("模型加载失败，试试一个体积更小的 GLB。"));
+      .catch(() =>
+        setMessage(
+          asset.objectUrl === BUNDLED_DEFAULT_MODEL_URL
+            ? "默认模型还没打包进项目。请把 GLB 放到 public/models/default.glb。"
+            : "模型加载失败，试试一个体积更小的 GLB。",
+        ),
+      );
   }, [asset]);
 
   const canCapture = status === "ready";
@@ -265,7 +273,7 @@ function App() {
     }
 
     setAsset((previous) => {
-      if (previous) {
+      if (previous?.objectUrl.startsWith("blob:")) {
         URL.revokeObjectURL(previous.objectUrl);
       }
       return nextAsset;
@@ -322,6 +330,28 @@ function App() {
     }
 
     setMessage("当前模型还没有可用的互动动作。");
+  }
+
+  function handleBundledModelLoad() {
+    setAsset((previous) => {
+      if (previous?.objectUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previous.objectUrl);
+      }
+
+      return {
+        id: `model3d-bundled-${Date.now()}`,
+        kind: "model3d",
+        name: BUNDLED_DEFAULT_MODEL_NAME,
+        objectUrl: BUNDLED_DEFAULT_MODEL_URL,
+        mimeType: "model/gltf-binary",
+      };
+    });
+    setInteractionPhase("idle");
+    setInteractionMode(null);
+    setLastTriggerSource(null);
+    applyCompanionSlot("left");
+    setCaptureUrl("");
+    setMessage("正在加载默认模型...");
   }
 
   useWaveTrigger({
@@ -563,6 +593,9 @@ function App() {
           </button>
           <button className="tool-button" onClick={handleModelImportClick} type="button">
             导入3D模型
+          </button>
+          <button className="tool-button" onClick={handleBundledModelLoad} type="button">
+            默认模型
           </button>
           <button
             className="shutter-button"
